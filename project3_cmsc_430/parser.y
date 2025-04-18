@@ -7,7 +7,6 @@ using namespace std;
 #include "listing.h"
 #include "values.h"
 
-
 int yylex();
 void yyerror(const char* message);
 
@@ -22,6 +21,14 @@ double finalResult = 0;
     char charVal;
     char* stringVal;
 }
+
+// Define precedence rules for operators
+%left ADDOP SUBOP     // Left-associative for + and -
+%left MULOP DIVOP MODOP // Left-associative for *, /, and %
+%left RELOP           // Left-associative for relational operators
+%right EXPOP          // Right-associative for exponentiation (if you want this as right-associative)
+%left ANDOP           // Left-associative for logical AND
+%left OROP            // Left-associative for logical OR
 
 // Tokens
 %token <stringVal> RELOP
@@ -38,8 +45,7 @@ double finalResult = 0;
 
 // Non-terminal types
 %type <realVal> function function_header statement statement_ expressions list condition
-%type <realVal> or_expr and_expr not_expr rel_expr rel_expr2 rel_expr3 rel_expr4 rel_expr5 primary
-%type <realVal> variable_declaration
+%type <realVal> expression primary variable_declaration
 
 %%
 
@@ -78,8 +84,8 @@ list:
     LPAREN expressions RPAREN { $$ = $2; };
 
 expressions:
-    expressions COMMA or_expr { $$ = $3; } |
-    or_expr { $$ = $1; };
+    expressions COMMA expression { $$ = $3; } |
+    expression { $$ = $1; };
 
 body:
     BEGIN_ statements END SEMICOLON ;
@@ -93,18 +99,17 @@ statements:
     statement_ ;
 
 statement:
-   or_expr { finalResult = $1; $$ = $1; } |
-   WHEN condition COMMA or_expr COLON or_expr {
-        // Evaluate the condition and then compare the two expressions
+   expression { finalResult = $1; $$ = $1; } |
+   WHEN condition COMMA expression COLON expression {
         if ($2) {
-            $$ = $6; // If the condition is true, select the first expression
+            $$ = $6;
         } else {
-            $$ = $4; // If the condition is false, select the second expression
+            $$ = $4;
         }
         finalResult = $$;
     } |
-    SWITCH or_expr IS cases OTHERS ARROW statement SEMICOLON ENDSWITCH { $$ = $7; } |
-    SWITCH or_expr IS cases error SEMICOLON ENDSWITCH { $$ = 0; } |
+    SWITCH expression IS cases OTHERS ARROW statement SEMICOLON ENDSWITCH { $$ = $7; } |
+    SWITCH expression IS cases error SEMICOLON ENDSWITCH { $$ = 0; } |
     IF condition THEN statement_ elsif_clauses ELSE statement_ ENDIF { $$ = $7; } |
     FOLD direction operator list_choice ENDFOLD { $$ = 0; } |
     error { $$ = 0; } ;
@@ -140,51 +145,30 @@ list_choice:
     IDENTIFIER ;
 
 condition:
-    or_expr ;
+    expression ;
 
-or_expr:
-    or_expr OROP and_expr { $$ = $1 || $3; } |
-    and_expr { $$ = $1; } ;
-
-and_expr:
-    and_expr ANDOP not_expr { $$ = $1 && $3; } |
-    not_expr { $$ = $1; } ;
-
-not_expr:
-    NOTOP not_expr { $$ = !$2; } |
-    rel_expr { $$ = $1; } ;
-
-rel_expr:
-    rel_expr RELOP rel_expr2 { $$ = evaluateRelop($2, $1, $3); } |
-    rel_expr2 { $$ = $1; } ;
-
-rel_expr2:
-    rel_expr2 ADDOP rel_expr3 { $$ = applyAdd($1, $3); } |
-    rel_expr2 SUBOP rel_expr3 { $$ = applySub($1, $3); } |
-    rel_expr3 { $$ = $1; } ;
-
-rel_expr3:
-    rel_expr3 MULOP rel_expr4 { $$ = applyMul($1, $3); } |
-    rel_expr3 DIVOP rel_expr4 { $$ = applyDiv($1, $3); } |
-    rel_expr3 MODOP rel_expr4 { $$ = applyMod($1, $3); } |
-    rel_expr4 { $$ = $1; } ;
-
-rel_expr4:
-    rel_expr4 EXPOP rel_expr5 { $$ = applyExp($1, $3); } |
-    rel_expr5 { $$ = $1; } ;
-
-rel_expr5:
-    NEGOP rel_expr5 { $$ = applyNeg($2); } |
-    primary { $$ = $1; } ;
-
+expression:
+      expression OROP expression         { $$ = $1 || $3; }
+    | expression ANDOP expression        { $$ = $1 && $3; }
+    | expression RELOP expression        { $$ = evaluateRelop($2, $1, $3); }
+    | expression ADDOP expression        { $$ = applyAdd($1, $3); }
+    | expression SUBOP expression        { $$ = applySub($1, $3); }
+    | expression MULOP expression        { $$ = applyMul($1, $3); }
+    | expression DIVOP expression        { $$ = applyDiv($1, $3); }
+    | expression MODOP expression        { $$ = applyMod($1, $3); }
+    | expression EXPOP expression        { $$ = applyExp($1, $3); }
+    | NOTOP expression %prec NOTOP       { $$ = !$2; }
+    | NEGOP expression %prec NEGOP       { $$ = applyNeg($2); }
+    | primary                            { $$ = $1; }
+    ;
 
 primary:
-    LPAREN or_expr RPAREN { $$ = $2; } |
+    LPAREN expression RPAREN { $$ = $2; } |
     INT_LITERAL    { $$ = $1; } |
     REAL_LITERAL   { $$ = $1; } |
     CHAR_LITERAL   { $$ = $1; } |
     HEX_LITERAL    { $$ = $1; } |
-    IDENTIFIER LPAREN or_expr RPAREN { $$ = $3; } |
+    IDENTIFIER LPAREN expression RPAREN { $$ = $3; } |
     IDENTIFIER { $$ = 0; } ;
 
 type:
