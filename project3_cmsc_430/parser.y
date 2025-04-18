@@ -91,10 +91,15 @@ statements:
     statement_ ;
 
 statement:
-    or_expr { finalResult = $1; $$ = $1; } |
-    WHEN condition COMMA or_expr COLON or_expr { 
-        $$ = $2 ? $4 : $6; 
-        finalResult = $$; 
+   or_expr { finalResult = $1; $$ = $1; } |
+   WHEN condition COMMA or_expr COLON or_expr {
+        // Evaluate the condition and then compare the two expressions
+        if ($2) {
+            $$ = $6; // If the condition is true, select the first expression
+        } else {
+            $$ = $4; // If the condition is false, select the second expression
+        }
+        finalResult = $$;
     } |
     SWITCH or_expr IS cases OTHERS ARROW statement SEMICOLON ENDSWITCH { $$ = $7; } |
     SWITCH or_expr IS cases error SEMICOLON ENDSWITCH { $$ = 0; } |
