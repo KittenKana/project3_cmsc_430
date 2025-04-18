@@ -4,6 +4,7 @@
 #include <cstring>
 #include <unordered_map>
 #include <iostream>
+#include <cstdlib>         // for atof
 using namespace std;
 
 #include "listing.h"
@@ -14,18 +15,23 @@ void yyerror(const char* message);
 
 double finalResult = 0;
 unordered_map<string,double> symbolTable;
+
+// parameter support:
+double* paramValues = nullptr;
+int     paramCount  = 0;
+int     paramIndex  = 0;
 %}
 
 %define parse.error verbose
 
 %union {
-  int intVal;
+  int    intVal;
   double realVal;
-  char charVal;
-  char* stringVal;
+  char   charVal;
+  char*  stringVal;
 }
 
-// Precedence
+// precedences
 %left OROP
 %left ANDOP
 %nonassoc RELOP
@@ -34,7 +40,7 @@ unordered_map<string,double> symbolTable;
 %right EXPOP
 %right NEGOP
 
-// Tokens
+// tokens
 %token <stringVal> RELOP IDENTIFIER
 %token <intVal>    INT_LITERAL HEX_LITERAL
 %token <realVal>   REAL_LITERAL
@@ -46,7 +52,6 @@ unordered_map<string,double> symbolTable;
 %token BEGIN_ CASE CHARACTER ELSE ELSIF END ENDCASE ENDFOLD ENDIF ENDSWITCH
 %token FOLD FUNCTION IF INTEGER IS LEFT LIST OF OTHERS REAL RETURNS RIGHT SWITCH THEN WHEN
 
-// Non‑terminals
 %type <realVal> function function_header statement statement_ expressions list condition
 %type <realVal> expression primary variable_declaration
 
@@ -57,7 +62,7 @@ function:
   ;
 
 function_header:
-    FUNCTION IDENTIFIER parameters_opt RETURNS type SEMICOLON { $$ = 0; }
+    FUNCTION IDENTIFIER parameters_opt RETURNS type SEMICOLON
   ;
 
 parameters_opt:
@@ -72,6 +77,12 @@ parameters:
 
 parameter:
     IDENTIFIER COLON type
+    {
+      // fetch next parameter from paramValues
+      double val = 0.0;
+      if (paramIndex < paramCount) val = paramValues[paramIndex++];
+      symbolTable[$1] = val;
+    }
   | IDENTIFIER error type { yyerrok; }
   ;
 
@@ -86,14 +97,15 @@ variable_declarations:
   ;
 
 variable_declaration:
-    IDENTIFIER COLON type IS statement SEMICOLON {
+    IDENTIFIER COLON type IS statement SEMICOLON
+    {
       symbolTable[$1] = $5;
       $$ = $5;
     }
-  | IDENTIFIER COLON LIST OF type IS list SEMICOLON {
-      $$ = $7;
-    }
-  | error SEMICOLON { $$ = 0; }
+  | IDENTIFIER COLON LIST OF type IS list SEMICOLON
+    { $$ = $7; }
+  | error SEMICOLON
+    { $$ = 0; }
   ;
 
 list:
@@ -120,36 +132,39 @@ statements:
   ;
 
 statement:
-    /* variable assignment */
-    IDENTIFIER COLON type IS expression SEMICOLON {
+    /* assignment */
+    IDENTIFIER COLON type IS expression SEMICOLON
+    {
       symbolTable[$1] = $5;
       $$ = $5;
     }
 
-    /* expression as statement */
-  | expression {
+  /* plain expression */
+  | expression
+    {
       finalResult = $1;
       $$ = $1;
     }
 
-    /* when cond , e1 : e2 */
-  | WHEN condition COMMA expression COLON expression {
+  /* when cond , e1 : e2 */
+  | WHEN condition COMMA expression COLON expression
+    {
       $$ = $2 ? $4 : $6;
       finalResult = $$;
     }
 
-    /* switch … others */
-  | SWITCH expression IS cases OTHERS ARROW statement SEMICOLON ENDSWITCH {
-      $$ = $7;
-    }
+  /* switch … others */
+  | SWITCH expression IS cases OTHERS ARROW statement SEMICOLON ENDSWITCH
+    { $$ = $7; }
 
-    /* plain if–then–else–endif */
-  | IF condition THEN statement_ ELSE statement_ ENDIF {
+  /* if‐then‐else */
+  | IF condition THEN statement_ ELSE statement_ ENDIF
+    {
       $$ = $2 ? $4 : $6;
       finalResult = $$;
     }
 
-    /* if…elsif…else…endif */
+  /* if‐elsif‐else */
   | IF condition THEN statement_
         ELSIF condition THEN statement_
         ELSE statement_ ENDIF
@@ -158,7 +173,7 @@ statement:
       finalResult = $$;
     }
 
-    /* if…elsif…elsif…else…endif */
+  /* if‐elsif‐elsif‐else */
   | IF condition THEN statement_
         ELSIF condition THEN statement_
         ELSIF condition THEN statement_
@@ -168,8 +183,6 @@ statement:
       finalResult = $$;
     }
   ;
-
-/* (We no longer need a separate elsif_clauses nonterminal.) */
 
 cases:
     cases case_clause
@@ -185,45 +198,32 @@ case:
     CASE INT_LITERAL ARROW statement
   ;
 
-direction:
-    LEFT | RIGHT
-  ;
-
-operator:
-    ADDOP | SUBOP | MULOP | MODOP | EXPOP
-  ;
-
-list_choice:
-    list | IDENTIFIER
-  ;
-
 condition:
     expression
   ;
 
-/* Full expression grammar with unary/binary ops */
 expression:
-      NOTOP   expression       { $$ = !$2; }
+      NOTOP   expression             { $$ = !$2; }
     | SUBOP   expression %prec NEGOP { $$ = -$2; }
     | NEGOP   expression %prec NEGOP { $$ = applyNeg($2); }
-    | expression OROP expression       { $$ = $1 || $3; }
-    | expression ANDOP expression      { $$ = $1 && $3; }
-    | expression RELOP expression      { $$ = evaluateRelop($2,$1,$3); }
-    | expression ADDOP expression      { $$ = applyAdd($1,$3); }
-    | expression SUBOP expression      { $$ = applySub($1,$3); }
-    | expression MULOP expression      { $$ = applyMul($1,$3); }
-    | expression DIVOP expression      { $$ = applyDiv($1,$3); }
-    | expression MODOP expression      { $$ = applyMod($1,$3); }
-    | expression EXPOP expression      { $$ = applyExp($1,$3); }
+    | expression OROP expression     { $$ = $1 || $3; }
+    | expression ANDOP expression    { $$ = $1 && $3; }
+    | expression RELOP expression    { $$ = evaluateRelop($2,$1,$3); }
+    | expression ADDOP expression    { $$ = applyAdd($1,$3); }
+    | expression SUBOP expression    { $$ = applySub($1,$3); }
+    | expression MULOP expression    { $$ = applyMul($1,$3); }
+    | expression DIVOP expression    { $$ = applyDiv($1,$3); }
+    | expression MODOP expression    { $$ = applyMod($1,$3); }
+    | expression EXPOP expression    { $$ = applyExp($1,$3); }
     | primary
   ;
 
 primary:
-    LPAREN expression RPAREN { $$ = $2; }
-  | INT_LITERAL              { $$ = $1; }
-  | REAL_LITERAL             { $$ = $1; }
-  | CHAR_LITERAL             { $$ = $1; }
-  | HEX_LITERAL              { $$ = $1; }
+    LPAREN expression RPAREN         { $$ = $2; }
+  | INT_LITERAL                     { $$ = $1; }
+  | REAL_LITERAL                    { $$ = $1; }
+  | CHAR_LITERAL                    { $$ = $1; }
+  | HEX_LITERAL                     { $$ = $1; }
   | IDENTIFIER LPAREN expression RPAREN { $$ = $3; }
   | IDENTIFIER {
       string id($1);
@@ -242,7 +242,15 @@ void yyerror(const char* message) {
   appendError(SYNTAX, message);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char* argv[]) {
+  // grab command‐line parameters
+  paramCount = argc - 1;
+  if (paramCount > 0) {
+    paramValues = new double[paramCount];
+    for (int i = 1; i < argc; i++)
+      paramValues[i-1] = atof(argv[i]);
+  }
+
   firstLine();
   yyparse();
   lastLine();
