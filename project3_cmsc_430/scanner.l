@@ -135,6 +135,7 @@ int charLiteralToValue(const char* text) {
 
 [a-zA-Z]([a-zA-Z0-9]*(_{1,2}[a-zA-Z0-9]+)*[a-zA-Z0-9]*) {
     ECHO;
+    yylval.stringVal = strdup(yytext);
     return IDENTIFIER;
 }
 

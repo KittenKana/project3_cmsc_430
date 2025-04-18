@@ -2,6 +2,14 @@
 #ifndef VALUES_H
 #define VALUES_H
 
+#include <unordered_map>
+#include <string>
+
+extern std::unordered_map<std::string, double> symbolTable;
+
+void printSymbolTable();
+
+
 double evaluateRelop(const char* op, double left, double right);
 double applyAdd(double left, double right);
 double applySub(double left, double right);

@@ -4,6 +4,13 @@
 #include "values.h"
 #include <iostream>
 
+void printSymbolTable() {
+    std::cout << "Symbol Table:\n";
+    for (const auto& entry : symbolTable) {
+        std::cout << entry.first << " = " << entry.second << "\n";
+    }
+}
+
 double evaluateRelop(const char* op, double left, double right) {
     if (strcmp(op, "=") == 0) return left == right;
     if (strcmp(op, "<>") == 0 || strcmp(op, "/=") == 0) return left != right;
