@@ -8,19 +8,23 @@
 using namespace std;
 
 #include "listing.h"
-#include "values.h"
 
 int yylex();
 void yyerror(const char* message);
 
 double finalResult = 0;
-unordered_map<string,double> symbolTable;
+unordered_map<string,double> symbolTable;  // Symbol table to store identifiers
 
 // parameter support:
 double* paramValues = nullptr;
 int     paramCount  = 0;
 int     paramIndex  = 0;
 %}
+
+%code requires {
+#include "values.h"
+#include <vector>
+}
 
 %define parse.error verbose
 
@@ -29,9 +33,9 @@ int     paramIndex  = 0;
   double realVal;
   char   charVal;
   char*  stringVal;
+  std::vector<Value>* vecVal;
 }
 
-// precedences
 %left OROP
 %left ANDOP
 %nonassoc RELOP
@@ -40,7 +44,6 @@ int     paramIndex  = 0;
 %right EXPOP
 %right NEGOP
 
-// tokens
 %token <stringVal> RELOP IDENTIFIER
 %token <intVal>    INT_LITERAL HEX_LITERAL
 %token <realVal>   REAL_LITERAL
@@ -52,8 +55,12 @@ int     paramIndex  = 0;
 %token BEGIN_ CASE CHARACTER ELSE ELSIF END ENDCASE ENDFOLD ENDIF ENDSWITCH
 %token FOLD FUNCTION IF INTEGER IS LEFT LIST OF OTHERS REAL RETURNS RIGHT SWITCH THEN WHEN
 
+%token <intVal> Y_OP
+
 %type <realVal> function function_header statement statement_ expressions list condition
-%type <realVal> expression primary variable_declaration
+%type <realVal> expression primary variable_declaration fold_expr
+%type <intVal> direction fold_op
+%type <vecVal> expr_list
 
 %%
 
@@ -78,10 +85,9 @@ parameters:
 parameter:
     IDENTIFIER COLON type
     {
-      // fetch next parameter from paramValues
       double val = 0.0;
       if (paramIndex < paramCount) val = paramValues[paramIndex++];
-      symbolTable[$1] = val;
+      symbolTable[$1] = val;  // Ensure identifier is assigned in the symbolTable
     }
   | IDENTIFIER error type { yyerrok; }
   ;
@@ -99,7 +105,7 @@ variable_declarations:
 variable_declaration:
     IDENTIFIER COLON type IS statement SEMICOLON
     {
-      symbolTable[$1] = $5;
+      symbolTable[$1] = $5;  // Assign value to the identifier in the symbol table
       $$ = $5;
     }
   | IDENTIFIER COLON LIST OF type IS list SEMICOLON
@@ -132,39 +138,28 @@ statements:
   ;
 
 statement:
-    /* assignment */
     IDENTIFIER COLON type IS expression SEMICOLON
     {
-      symbolTable[$1] = $5;
+      symbolTable[$1] = $5;  // Update symbol table with new assignment
       $$ = $5;
     }
-
-  /* plain expression */
   | expression
     {
       finalResult = $1;
       $$ = $1;
     }
-
-  /* when cond , e1 : e2 */
   | WHEN condition COMMA expression COLON expression
     {
       $$ = $2 ? $4 : $6;
       finalResult = $$;
     }
-
-  /* switch … others */
   | SWITCH expression IS cases OTHERS ARROW statement SEMICOLON ENDSWITCH
     { $$ = $7; }
-
-  /* if‐then‐else */
   | IF condition THEN statement_ ELSE statement_ ENDIF
     {
       $$ = $2 ? $4 : $6;
       finalResult = $$;
     }
-
-  /* if‐elsif‐else */
   | IF condition THEN statement_
         ELSIF condition THEN statement_
         ELSE statement_ ENDIF
@@ -172,8 +167,6 @@ statement:
       $$ = $2 ? $4 : ( $6 ? $8 : $10 );
       finalResult = $$;
     }
-
-  /* if‐elsif‐elsif‐else */
   | IF condition THEN statement_
         ELSIF condition THEN statement_
         ELSIF condition THEN statement_
@@ -216,7 +209,70 @@ expression:
     | expression MODOP expression    { $$ = applyMod($1,$3); }
     | expression EXPOP expression    { $$ = applyExp($1,$3); }
     | primary
+    | fold_expr                      { $$ = $1; }  /* <- fold support */
   ;
+
+fold_expr:
+    FOLD direction fold_op expr_list ENDFOLD
+    {
+        std::cout << "Entering FOLD expression: " << std::endl;
+        int dir = $2;
+        int op  = $3;
+        std::vector<double> values;
+        for (const Value& v : *$4) {
+            values.push_back(v.realVal);
+        }
+        std::cout << "Fold Direction: " << dir << ", Fold Operator: " << op << std::endl;
+        std::cout << "Values to fold: ";
+        for (double val : values) {
+            std::cout << val << " ";
+        }
+        std::cout << std::endl;
+
+        $$ = evaluateFold(dir, op, values);
+        std::cout << "Fold result: " << $$ << std::endl;
+        delete $4;
+    }
+  | FOLD direction fold_op IDENTIFIER ENDFOLD
+    {
+        std::cout << "Entering FOLD expression with IDENTIFIER: " << $4 << std::endl;
+        string id($4);
+        auto it = symbolTable.find(id);
+        if (it != symbolTable.end()) {
+            std::cout << "Found identifier " << id << " with value: " << it->second << std::endl;
+            vector<double> values = { it->second };
+            $$ = evaluateFold($2, $3, values);
+        } else {
+            std::cout << "Identifier " << id << " not found. Using default value 0.0." << std::endl;
+            $$ = 0.0; // Handle missing variable case
+        }
+        std::cout << "Fold result: " << $$ << std::endl;
+    }
+  ;
+
+direction:
+    LEFT     { $$ = LEFT; std::cout << "Direction: LEFT" << std::endl; }
+  | RIGHT    { $$ = RIGHT; std::cout << "Direction: RIGHT" << std::endl; }
+  ;
+
+fold_op:
+    Y_OP     { $$ = $1; std::cout << "Operator: Y_OP" << std::endl; }   // Existing operator logic (ADD, MUL, etc.)
+  | SUBOP    { $$ = SUBOP; std::cout << "Operator: SUBOP" << std::endl; } // Add support for SUBOP here
+  ;
+
+expr_list:
+    expression {
+        $$ = new std::vector<Value>();
+        $$->push_back(Value($1));
+        std::cout << "Expression added to list: " << $1 << std::endl;
+    }
+  | expr_list COMMA expression {
+      $$ = $1;
+      $$->push_back(Value($3));
+      std::cout << "Expression added to list: " << $3 << std::endl;
+  }
+;
+
 
 primary:
     LPAREN expression RPAREN         { $$ = $2; }
@@ -228,7 +284,7 @@ primary:
   | IDENTIFIER {
       string id($1);
       auto it = symbolTable.find(id);
-      $$ = (it!=symbolTable.end() ? it->second : 0.0);
+      $$ = (it != symbolTable.end() ? it->second : 0.0);  // Assign from symbol table or use default value
     }
   ;
 
@@ -239,11 +295,11 @@ type:
 %%
 
 void yyerror(const char* message) {
-  appendError(SYNTAX, message);
+  appendError(SYNTAX, message);  // Error printing integration
+  std::cerr << "Error: " << message << std::endl;
 }
 
 int main(int argc, char* argv[]) {
-  // grab command‐line parameters
   paramCount = argc - 1;
   if (paramCount > 0) {
     paramValues = new double[paramCount];

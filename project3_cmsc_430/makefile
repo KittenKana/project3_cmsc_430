@@ -1,6 +1,6 @@
 # Define the compiler
 CXX = g++
-CXXFLAGS = -std=c++11
+CXXFLAGS = -std=c++17
 
 # Define the object files
 OBJ = scanner.o parser.o listing.o values.o
