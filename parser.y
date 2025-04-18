@@ -1,8 +1,8 @@
 %{
 #include <string>
 #include <cstdlib>
-#include <cstring>   // <-- Fix for strcmp
-#include <cmath>     // <-- Fix for pow
+#include <cstring>   // Fix for strcmp
+#include <cmath>     // Fix for pow
 using namespace std;
 
 #include "listing.h"
@@ -29,7 +29,7 @@ void yyerror(const char* message);
 
 function:
     function_header variable_declarations_opt body {
-        printf("\nResult = %.2f\n", $3);
+        printf("\nResult = %.2f\n", $3);  // Print result of the function (which comes from $3, the body)
     };
 
 function_header:
@@ -69,7 +69,7 @@ expressions:
 
 body:
     BEGIN_ statements END SEMICOLON {
-        $$ = $2;
+        $$ = $2;  // The body should return the result of the statements
     };
 
 statements:
@@ -77,8 +77,11 @@ statements:
     statement SEMICOLON { $$ = $1; };
 
 statement:
-    or_expr |
-    WHEN condition COMMA or_expr COLON or_expr |
+    or_expr { $$ = $1; } |
+    WHEN condition COMMA or_expr COLON or_expr {
+    if ($2) $$ = $4;
+    else $$ = $6;
+    } |
     SWITCH or_expr IS cases OTHERS ARROW statement SEMICOLON ENDSWITCH |
     SWITCH or_expr IS cases error SEMICOLON ENDSWITCH |
     IF condition THEN statement ELSIF condition THEN statement ELSE statement ENDIF |
@@ -161,8 +164,21 @@ rel_expr5:
 primary:
     REAL_LITERAL { $$ = realValue; } |
     HEX_LITERAL { $$ = intValue; } |
-    INT_LITERAL { $$ = stoi(yytext); } |
-    CHAR_LITERAL { $$ = yytext[1]; } |
+    INT_LITERAL { $$ = intValue; } |
+    CHAR_LITERAL {
+        // Handle escape sequences for character literals
+        if (yytext[1] == '\\') {
+            if (yytext[2] == 'n') $$ = '\n';    // Newline
+            else if (yytext[2] == 'f') $$ = '\f'; // Form feed
+            else if (yytext[2] == 't') $$ = '\t'; // Tab
+            else if (yytext[2] == 'r') $$ = '\r'; // Carriage return
+            else if (yytext[2] == '\\') $$ = '\\'; // Backslash
+            else $$ = yytext[2];  // Handle other escape sequences
+        } else {
+            $$ = yytext[1];  // For non-escaped characters
+        }
+        printf("CHAR_LITERAL: %f\n", $$); // Corrected print format for char literal
+    } |
     LPAREN or_expr RPAREN { $$ = $2; } |
     IDENTIFIER LPAREN or_expr RPAREN { $$ = $3; } |
     IDENTIFIER { $$ = 0; } ;

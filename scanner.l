@@ -42,16 +42,19 @@ int convertHexToInt(const string& hexStr) {
 
 [0-9]*\.[0-9]+([eE][+-]?[0-9]+)? {
     realValue = atof(yytext);
+    ECHO;
     return REAL_LITERAL;
 }
 
 [0-9]+[eE][+-]?[0-9]+ {
     realValue = atof(yytext);
+    ECHO;
     return REAL_LITERAL;
 }
 
 #[0-9a-fA-F]+ {
     intValue = convertHexToInt(yytext);
+    ECHO;
     return HEX_LITERAL;
 }
 
@@ -122,7 +125,27 @@ int convertHexToInt(const string& hexStr) {
 [0-9]*\.[0-9]+([eE][+-]?[0-9]+)?  { ECHO; return REAL_LITERAL; }
 [0-9]+[eE][+-]?[0-9]+            { ECHO; return REAL_LITERAL; }
 
-\'([^\'\n\r\\]|\\[btnfr\'\"\\])\'  { ECHO; return CHAR_LITERAL; }
+\'([^\'\n\r\\]|\\[btnfr\'\"\\])\'  { 
+    if (yytext[1] == '\\') {
+        switch (yytext[2]) {
+            case 'n': intValue = '\n'; break;
+            case 'f': intValue = '\f'; break;
+            case 'b': intValue = '\b'; break;
+            case 't': intValue = '\t'; break;
+            case 'r': intValue = '\r'; break;
+            case '\'': intValue = '\''; break;
+            case '\"': intValue = '\"'; break;
+            case '\\': intValue = '\\'; break;
+            default: intValue = yytext[2]; break;
+        }
+    } else {
+        intValue = yytext[1];
+    }
+    ECHO;
+    return CHAR_LITERAL;
+}
+
+
 
 [_]+                             { ECHO; return BAD_IDENTIFIER; }
 [a-zA-Z0-9]*_{3,}[a-zA-Z0-9]*    { ECHO; return BAD_IDENTIFIER; }
