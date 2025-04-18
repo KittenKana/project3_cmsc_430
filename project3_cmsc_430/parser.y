@@ -5,6 +5,8 @@
 using namespace std;
 
 #include "listing.h"
+#include "values.h"
+
 
 int yylex();
 void yyerror(const char* message);
@@ -153,36 +155,28 @@ not_expr:
     rel_expr { $$ = $1; } ;
 
 rel_expr:
-    rel_expr RELOP rel_expr2 {
-        if (strcmp($2, "=") == 0) $$ = $1 == $3;
-        else if (strcmp($2, "<>") == 0) $$ = $1 != $3;
-        else if (strcmp($2, "/=") == 0) $$ = $1 != $3;
-        else if (strcmp($2, "<") == 0) $$ = $1 < $3;
-        else if (strcmp($2, "<=") == 0) $$ = $1 <= $3;
-        else if (strcmp($2, ">") == 0) $$ = $1 > $3;
-        else if (strcmp($2, ">=") == 0) $$ = $1 >= $3;
-        else $$ = 0;
-    } |
+    rel_expr RELOP rel_expr2 { $$ = evaluateRelop($2, $1, $3); } |
     rel_expr2 { $$ = $1; } ;
 
 rel_expr2:
-    rel_expr2 ADDOP rel_expr3 { $$ = $1 + $3; } |
-    rel_expr2 SUBOP rel_expr3 { $$ = $1 - $3; } |
+    rel_expr2 ADDOP rel_expr3 { $$ = applyAdd($1, $3); } |
+    rel_expr2 SUBOP rel_expr3 { $$ = applySub($1, $3); } |
     rel_expr3 { $$ = $1; } ;
 
 rel_expr3:
-    rel_expr3 MULOP rel_expr4 { $$ = $1 * $3; } |
-    rel_expr3 DIVOP rel_expr4 { $$ = $1 / $3; } |
-    rel_expr3 MODOP rel_expr4 { $$ = fmod($1, $3); } |
+    rel_expr3 MULOP rel_expr4 { $$ = applyMul($1, $3); } |
+    rel_expr3 DIVOP rel_expr4 { $$ = applyDiv($1, $3); } |
+    rel_expr3 MODOP rel_expr4 { $$ = applyMod($1, $3); } |
     rel_expr4 { $$ = $1; } ;
 
 rel_expr4:
-    rel_expr4 EXPOP rel_expr5 { $$ = pow($1, $3); } |
+    rel_expr4 EXPOP rel_expr5 { $$ = applyExp($1, $3); } |
     rel_expr5 { $$ = $1; } ;
 
 rel_expr5:
-    NEGOP rel_expr5 { $$ = -$2; } |
+    NEGOP rel_expr5 { $$ = applyNeg($2); } |
     primary { $$ = $1; } ;
+
 
 primary:
     LPAREN or_expr RPAREN { $$ = $2; } |
