@@ -1,8 +1,8 @@
 // CMSC 430 Compiler Theory and Design
 // UMGC
 // Kana Coen
-// 08 April 2025
-// Project 2
+// 17 April 2025
+// Project 3
 
 #include <cstdio>
 #include <string>
@@ -75,7 +75,7 @@ void appendError(ErrorCategories errorCategory, string message) {
             break;
         case SYNTAX:
             syntaxErrors++;
-            errorMsg = "" + message;
+            errorMsg = "Syntax Error: " + message;
             break;
         case GENERAL_SEMANTIC:
         case DUPLICATE_IDENTIFIER:
@@ -87,6 +87,7 @@ void appendError(ErrorCategories errorCategory, string message) {
 
     totalErrors++;
 
+    // Print errors in red if syntax error
     if (errorCategory == SYNTAX) {
         // Print red text using ANSI escape codes
         printf("\n \033[1;31m%s\033[0m\n", errorMsg.c_str());
@@ -94,9 +95,6 @@ void appendError(ErrorCategories errorCategory, string message) {
         error += errorMsg + "\n";
     }
 }
-
-
-
 
 // Display errors for the current line
 void displayErrors() {
@@ -116,15 +114,52 @@ void parseInput() {
             case BAD_HEX_LITERAL:
                 appendError(LEXICAL, "BAD_HEX_LITERAL: " + tokenText);
                 break;
-            case BAD_IDENTIFIER: 
+            case BAD_IDENTIFIER:
                 appendError(LEXICAL, "BAD_IDENTIFIER: " + tokenText);
                 break;
+            case REAL_LITERAL:
+                // Handle invalid real literals
+                if (!isValidRealLiteral(tokenText)) {
+                    appendError(LEXICAL, "INVALID_REAL_LITERAL: " + tokenText);
+                }
+                break;
+            case HEX_LITERAL:
+                // Handle invalid hex literals
+                if (!isValidHexLiteral(tokenText)) {
+                    appendError(LEXICAL, "INVALID_HEX_LITERAL: " + tokenText);
+                }
+                break;
+            case INT_LITERAL:
+                // Handle invalid integer literals
+                if (!isValidIntLiteral(tokenText)) {
+                    appendError(LEXICAL, "INVALID_INT_LITERAL: " + tokenText);
+                }
+                break;
             default:
-                if (token < 256 && !isspace(token))
+                if (token < 256 && !isspace(token)) {
                     appendError(LEXICAL, "INVALID_CHARACTER: " + string(1, yytext[0]));
+                }
                 break;
         }
     }
 
     lastLine();
+}
+
+// Check if a real literal is valid
+bool isValidRealLiteral(const string& str) {
+    // Basic check for valid real literal (simplified version)
+    return str.find_first_not_of("0123456789.-") == string::npos;
+}
+
+// Check if a hexadecimal literal is valid
+bool isValidHexLiteral(const string& str) {
+    // Basic check for valid hexadecimal literal (simplified version)
+    return str.find_first_not_of("0123456789ABCDEFabcdef") == string::npos;
+}
+
+// Check if an integer literal is valid
+bool isValidIntLiteral(const string& str) {
+    // Basic check for valid integer literal (simplified version)
+    return str.find_first_not_of("0123456789") == string::npos;
 }

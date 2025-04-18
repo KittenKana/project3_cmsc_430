@@ -1,11 +1,59 @@
 %{
 #include "tokens.h"
 #include <stdio.h>
+
+#include <cmath>
+#include <cstdlib>
+#include <string>
+#include "listing.h"
+
+using namespace std;
+
+double realValue;
+int intValue;
+
+int convertHexToInt(const string& hexStr) {
+    int value = 0;
+    size_t i = 0;
+
+    // Skip prefix like # or 0x if present
+    if (hexStr[0] == '#' || hexStr.substr(0, 2) == "0x")
+        i++;
+
+    while (i < hexStr.size()) {
+        char c = hexStr[i++];
+        value *= 16;
+        if (c >= '0' && c <= '9')
+            value += c - '0';
+        else if (c >= 'a' && c <= 'f')
+            value += 10 + (c - 'a');
+        else if (c >= 'A' && c <= 'F')
+            value += 10 + (c - 'A');
+        else
+            return 0; // Invalid hex
+    }
+    return value;
+}
 %}
 
 %option noyywrap
 
 %%
+
+[0-9]*\.[0-9]+([eE][+-]?[0-9]+)? {
+    realValue = atof(yytext);
+    return REAL_LITERAL;
+}
+
+[0-9]+[eE][+-]?[0-9]+ {
+    realValue = atof(yytext);
+    return REAL_LITERAL;
+}
+
+#[0-9a-fA-F]+ {
+    intValue = convertHexToInt(yytext);
+    return HEX_LITERAL;
+}
 
 \/\/[^\n]*            { ECHO; /* Ignore // comments */ }
 --[^\n]*              { ECHO; /* Ignore -- comments */ }
