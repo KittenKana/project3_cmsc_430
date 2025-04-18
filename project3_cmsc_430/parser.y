@@ -1,6 +1,7 @@
 %{
 #include <string>
-#include <cmath>  // Needed for pow
+#include <cmath>
+#include <cstring>
 using namespace std;
 
 #include "listing.h"
@@ -13,7 +14,6 @@ double finalResult = 0;
 
 %define parse.error verbose
 
-// Token definitions with types
 %union {
     int intVal;
     double realVal;
@@ -21,28 +21,31 @@ double finalResult = 0;
     char* stringVal;
 }
 
-// Tokens with no value
-%token COMMA COLON SEMICOLON LPAREN RPAREN ARROW
-%token BAD_IDENTIFIER BAD_CHARACTER BAD_HEX_LITERAL
-%token ANDOP OROP NOTOP RELOP ADDOP SUBOP MULOP DIVOP REMOP EXPOP NEGOP MODOP
-%token BEGIN_ CASE CHARACTER ELSE ELSIF END ENDCASE ENDFOLD ENDIF ENDSWITCH
-%token FOLD FUNCTION IF INTEGER IS LEFT LIST OF OTHERS REAL RETURNS RIGHT SWITCH THEN WHEN
-
-// Tokens with typed values
+// Tokens
+%token <stringVal> RELOP
+%token <stringVal> IDENTIFIER
 %token <intVal> INT_LITERAL HEX_LITERAL
 %token <realVal> REAL_LITERAL
 %token <charVal> CHAR_LITERAL
-%token <stringVal> IDENTIFIER
+
+%token COMMA COLON SEMICOLON LPAREN RPAREN ARROW
+%token BAD_IDENTIFIER BAD_CHARACTER BAD_HEX_LITERAL
+%token ANDOP OROP NOTOP ADDOP SUBOP MULOP DIVOP REMOP EXPOP NEGOP MODOP
+%token BEGIN_ CASE CHARACTER ELSE ELSIF END ENDCASE ENDFOLD ENDIF ENDSWITCH
+%token FOLD FUNCTION IF INTEGER IS LEFT LIST OF OTHERS REAL RETURNS RIGHT SWITCH THEN WHEN
 
 // Non-terminal types
-%type <realVal> or_expr and_expr not_expr rel_expr rel_expr2 rel_expr3 rel_expr4 rel_expr5 primary statement statement_
+%type <realVal> function function_header statement statement_ expressions list condition
+%type <realVal> or_expr and_expr not_expr rel_expr rel_expr2 rel_expr3 rel_expr4 rel_expr5 primary
+%type <realVal> variable_declaration
+
 %%
 
 function:
     function_header variable_declarations_opt body ;
 
 function_header:
-    FUNCTION IDENTIFIER parameters_opt RETURNS type SEMICOLON ;
+    FUNCTION IDENTIFIER parameters_opt RETURNS type SEMICOLON { $$ = 0; };
 
 parameters_opt:
     parameters |
@@ -53,9 +56,8 @@ parameters:
     parameter ;
 
 parameter:
-    IDENTIFIER COLON type
-    | IDENTIFIER error type { yyerrok; }
-    ;
+    IDENTIFIER COLON type |
+    IDENTIFIER error type { yyerrok; };
 
 variable_declarations_opt:
     variable_declarations |
@@ -66,31 +68,34 @@ variable_declarations:
     variable_declaration ;
 
 variable_declaration:
-    IDENTIFIER COLON type IS statement SEMICOLON |
-    IDENTIFIER COLON LIST OF type IS list SEMICOLON |
-    error SEMICOLON ;
+    IDENTIFIER COLON type IS statement SEMICOLON { $$ = $5; } |
+    IDENTIFIER COLON LIST OF type IS list SEMICOLON { $$ = $7; } |
+    error SEMICOLON { $$ = 0; };
 
 list:
-    LPAREN expressions RPAREN ;
+    LPAREN expressions RPAREN { $$ = $2; };
 
 expressions:
-    expressions COMMA or_expr |
-    or_expr ;
+    expressions COMMA or_expr { $$ = $3; } |
+    or_expr { $$ = $1; };
 
 body:
     BEGIN_ statements END SEMICOLON ;
 
 statement_:
-    statement SEMICOLON |
-    error SEMICOLON ;
+    statement SEMICOLON { $$ = $1; } |
+    error SEMICOLON { $$ = 0; };
 
 statements:
     statements statement_ |
     statement_ ;
 
 statement:
-    or_expr              { finalResult = $1; $$ = $1; } |
-    WHEN condition COMMA or_expr COLON or_expr { $$ = $6; } |
+    or_expr { finalResult = $1; $$ = $1; } |
+    WHEN condition COMMA or_expr COLON or_expr { 
+        $$ = $2 ? $4 : $6; 
+        finalResult = $$; 
+    } |
     SWITCH or_expr IS cases OTHERS ARROW statement SEMICOLON ENDSWITCH { $$ = $7; } |
     SWITCH or_expr IS cases error SEMICOLON ENDSWITCH { $$ = 0; } |
     IF condition THEN statement_ elsif_clauses ELSE statement_ ENDIF { $$ = $7; } |
@@ -107,10 +112,10 @@ cases:
 
 case_clause:
     case SEMICOLON |
-    error SEMICOLON;
+    error SEMICOLON ;
 
 case:
-    CASE INT_LITERAL ARROW statement;
+    CASE INT_LITERAL ARROW statement ;
 
 direction:
     LEFT |
@@ -143,7 +148,16 @@ not_expr:
     rel_expr { $$ = $1; } ;
 
 rel_expr:
-    rel_expr RELOP rel_expr2 { $$ = $1; } | // Needs to be implemented properly
+    rel_expr RELOP rel_expr2 {
+        if (strcmp($2, "=") == 0) $$ = $1 == $3;
+        else if (strcmp($2, "<>") == 0) $$ = $1 != $3;
+        else if (strcmp($2, "/=") == 0) $$ = $1 != $3;
+        else if (strcmp($2, "<") == 0) $$ = $1 < $3;
+        else if (strcmp($2, "<=") == 0) $$ = $1 <= $3;
+        else if (strcmp($2, ">") == 0) $$ = $1 > $3;
+        else if (strcmp($2, ">=") == 0) $$ = $1 >= $3;
+        else $$ = 0;
+    } |
     rel_expr2 { $$ = $1; } ;
 
 rel_expr2:
@@ -189,6 +203,6 @@ int main(int argc, char *argv[]) {
     firstLine();
     yyparse();
     lastLine();
-    printf("Result = %.2f\n", finalResult); 
+    printf("Result = %.2f\n", finalResult);
     return 0;
 }
