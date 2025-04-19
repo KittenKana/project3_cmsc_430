@@ -59,11 +59,11 @@ int     paramIndex  = 0;
 
 %token <intVal> Y_OP
 
-%type <realVal> function function_header statement statement_ expressions list condition
+%type <realVal> function function_header statement statement_ condition
 %type <realVal> expression primary variable_declaration fold_expr
 %type <intVal> direction fold_op
-%type <vecVal> expr_list
 
+%type <vecVal> expressions list expr_list
 %%
 
 function:
@@ -111,24 +111,41 @@ variable_declaration:
     }
   | IDENTIFIER COLON LIST OF type IS list SEMICOLON
     {
-      // Store list in vectorTable
+      // Initialize a new vector to store the list values
       vector<Value>* vec = new vector<Value>();
-      vec->push_back(Value($7));
+
+
+        for (const Value& val : *$7) {
+            vec->push_back(val);  // Push each value from the list into the vector
+        }
+      
+      // Store the vector in vectorTable using the identifier as the key
       vectorTable[$1] = *vec;
-      $$ = 0;
+      $$ = 0;  // No return value for variable declaration
     }
   | error SEMICOLON
     { $$ = 0; }
   ;
+
+
+
+
 
 list:
     LPAREN expressions RPAREN { $$ = $2; }
   ;
 
 expressions:
-    expressions COMMA expression { $$ = $3; }
-  | expression                { $$ = $1; }
+    expressions COMMA expression {
+        $$ = $1;
+        $$->push_back(Value($3));  // Wrap $3 in a Value and add to vector
+    }
+  | expression {
+        $$ = new std::vector<Value>();  // Start new vector
+        $$->push_back(Value($1));       // Wrap $1 in a Value and add
+    }
   ;
+
 
 body:
     BEGIN_ statements END SEMICOLON
@@ -223,9 +240,14 @@ fold_expr:
     FOLD direction fold_op expr_list ENDFOLD
     {
         vector<double> values;
-        for (const Value& v : *$4) values.push_back(v.realVal);
-        $$ = evaluateFold($2, $3, values);
-        delete $4;
+        std::cout << "Folding with values: ";
+        for (const Value& v : *$4) {
+            values.push_back(v.realVal);  // Extract the real value from the Value object
+            std::cout << v.realVal << " ";  // Print each value in the list
+        }
+        std::cout << std::endl;
+        $$ = evaluateFold($2, $3, values);  // Call evaluateFold with the extracted values
+        delete $4;  // Clean up the list
     }
   | FOLD direction fold_op IDENTIFIER ENDFOLD
     {
@@ -233,13 +255,21 @@ fold_expr:
         auto it = vectorTable.find(id);
         if (it != vectorTable.end()) {
             vector<double> values;
-            for (const Value& v : it->second) values.push_back(v.realVal);
-            $$ = evaluateFold($2, $3, values);
+            std::cout << "Folding with values from identifier " << id << ": ";
+            for (const Value& v : it->second) {
+                values.push_back(v.realVal);  // Extract the real value from the Value object
+                std::cout << v.realVal << " ";  // Print each value in the list
+            }
+            std::cout << std::endl;
+            $$ = evaluateFold($2, $3, values);  // Call evaluateFold with the extracted values
         } else {
-            $$ = 0.0;
+            $$ = 0.0;  // Default to 0.0 if not found
         }
     }
   ;
+
+
+
 
 direction:
     LEFT     { $$ = LEFT; }
@@ -254,13 +284,14 @@ fold_op:
 expr_list:
     expression {
         $$ = new std::vector<Value>();
-        $$->push_back(Value($1));
+        $$->push_back(Value($1));  // Store the evaluated expression as a Value object
     }
   | expr_list COMMA expression {
       $$ = $1;
-      $$->push_back(Value($3));
+      $$->push_back(Value($3));  // Add more Value objects to the list
   }
 ;
+
 
 primary:
     LPAREN expression RPAREN         { $$ = $2; }
