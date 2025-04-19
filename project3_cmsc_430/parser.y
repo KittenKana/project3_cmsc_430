@@ -4,18 +4,20 @@
 #include <cstring>
 #include <unordered_map>
 #include <iostream>
-#include <cstdlib>         // for atof
+#include <cstdlib>
+#include <vector>
 using namespace std;
 
 #include "listing.h"
+#include "values.h"
 
 int yylex();
 void yyerror(const char* message);
 
 double finalResult = 0;
-unordered_map<string,double> symbolTable;  // Symbol table to store identifiers
+unordered_map<string, double> symbolTable;
+unordered_map<string, vector<Value>> vectorTable; // NEW: separate table for vectors
 
-// parameter support:
 double* paramValues = nullptr;
 int     paramCount  = 0;
 int     paramIndex  = 0;
@@ -87,9 +89,8 @@ parameter:
     {
       double val = 0.0;
       if (paramIndex < paramCount) val = paramValues[paramIndex++];
-      symbolTable[$1] = val;  // Ensure identifier is assigned in the symbolTable
+      symbolTable[$1] = val;
     }
-  | IDENTIFIER error type { yyerrok; }
   ;
 
 variable_declarations_opt:
@@ -105,11 +106,17 @@ variable_declarations:
 variable_declaration:
     IDENTIFIER COLON type IS statement SEMICOLON
     {
-      symbolTable[$1] = $5;  // Assign value to the identifier in the symbol table
+      symbolTable[$1] = $5;
       $$ = $5;
     }
   | IDENTIFIER COLON LIST OF type IS list SEMICOLON
-    { $$ = $7; }
+    {
+      // Store list in vectorTable
+      vector<Value>* vec = new vector<Value>();
+      vec->push_back(Value($7));
+      vectorTable[$1] = *vec;
+      $$ = 0;
+    }
   | error SEMICOLON
     { $$ = 0; }
   ;
@@ -140,7 +147,7 @@ statements:
 statement:
     IDENTIFIER COLON type IS expression SEMICOLON
     {
-      symbolTable[$1] = $5;  // Update symbol table with new assignment
+      symbolTable[$1] = $5;
       $$ = $5;
     }
   | expression
@@ -209,70 +216,51 @@ expression:
     | expression MODOP expression    { $$ = applyMod($1,$3); }
     | expression EXPOP expression    { $$ = applyExp($1,$3); }
     | primary
-    | fold_expr                      { $$ = $1; }  /* <- fold support */
+    | fold_expr                      { $$ = $1; }
   ;
 
 fold_expr:
     FOLD direction fold_op expr_list ENDFOLD
     {
-        std::cout << "Entering FOLD expression: " << std::endl;
-        int dir = $2;
-        int op  = $3;
-        std::vector<double> values;
-        for (const Value& v : *$4) {
-            values.push_back(v.realVal);
-        }
-        std::cout << "Fold Direction: " << dir << ", Fold Operator: " << op << std::endl;
-        std::cout << "Values to fold: ";
-        for (double val : values) {
-            std::cout << val << " ";
-        }
-        std::cout << std::endl;
-
-        $$ = evaluateFold(dir, op, values);
-        std::cout << "Fold result: " << $$ << std::endl;
+        vector<double> values;
+        for (const Value& v : *$4) values.push_back(v.realVal);
+        $$ = evaluateFold($2, $3, values);
         delete $4;
     }
   | FOLD direction fold_op IDENTIFIER ENDFOLD
     {
-        std::cout << "Entering FOLD expression with IDENTIFIER: " << $4 << std::endl;
         string id($4);
-        auto it = symbolTable.find(id);
-        if (it != symbolTable.end()) {
-            std::cout << "Found identifier " << id << " with value: " << it->second << std::endl;
-            vector<double> values = { it->second };
+        auto it = vectorTable.find(id);
+        if (it != vectorTable.end()) {
+            vector<double> values;
+            for (const Value& v : it->second) values.push_back(v.realVal);
             $$ = evaluateFold($2, $3, values);
         } else {
-            std::cout << "Identifier " << id << " not found. Using default value 0.0." << std::endl;
-            $$ = 0.0; // Handle missing variable case
+            $$ = 0.0;
         }
-        std::cout << "Fold result: " << $$ << std::endl;
     }
   ;
 
 direction:
-    LEFT     { $$ = LEFT; std::cout << "Direction: LEFT" << std::endl; }
-  | RIGHT    { $$ = RIGHT; std::cout << "Direction: RIGHT" << std::endl; }
+    LEFT     { $$ = LEFT; }
+  | RIGHT    { $$ = RIGHT; }
   ;
 
 fold_op:
-    Y_OP     { $$ = $1; std::cout << "Operator: Y_OP" << std::endl; }   // Existing operator logic (ADD, MUL, etc.)
-  | SUBOP    { $$ = SUBOP; std::cout << "Operator: SUBOP" << std::endl; } // Add support for SUBOP here
+    Y_OP     { $$ = $1; }
+  | SUBOP    { $$ = SUBOP; }
   ;
 
 expr_list:
     expression {
         $$ = new std::vector<Value>();
         $$->push_back(Value($1));
-        std::cout << "Expression added to list: " << $1 << std::endl;
     }
   | expr_list COMMA expression {
       $$ = $1;
       $$->push_back(Value($3));
-      std::cout << "Expression added to list: " << $3 << std::endl;
   }
 ;
-
 
 primary:
     LPAREN expression RPAREN         { $$ = $2; }
@@ -284,7 +272,7 @@ primary:
   | IDENTIFIER {
       string id($1);
       auto it = symbolTable.find(id);
-      $$ = (it != symbolTable.end() ? it->second : 0.0);  // Assign from symbol table or use default value
+      $$ = (it != symbolTable.end() ? it->second : 0.0);
     }
   ;
 
@@ -295,7 +283,7 @@ type:
 %%
 
 void yyerror(const char* message) {
-  appendError(SYNTAX, message);  // Error printing integration
+  appendError(SYNTAX, message);
   std::cerr << "Error: " << message << std::endl;
 }
 
