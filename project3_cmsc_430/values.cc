@@ -35,13 +35,14 @@ double applyOp(const std::string& func, double left, double right) {
 
 double evaluateFold(int direction, int op, const std::vector<double>& list) {
     std::string opStr;
+    std::cout << "Evaluating fold with operation index: " << op << std::endl;  // Log the operator index
     switch (op) {
-        case 0:  opStr = "ADD"; break;
-        case 1:  opStr = "SUB"; break;
-        case 2:  opStr = "MUL"; break;
-        case 3:  opStr = "DIV"; break;
-        case 4:  opStr = "MOD"; break;
-        case 5:  opStr = "EXP"; break;
+        case 276:  opStr = "ADD"; break;
+        case 277:  opStr = "SUB"; break;
+        case 278:  opStr = "MUL"; break;
+        case 279:  opStr = "DIV"; break;
+        case 280:  opStr = "MOD"; break;
+        case 281:  opStr = "EXP"; break;
         default: opStr = "ADD"; break;
     }
 
@@ -58,11 +59,11 @@ double evaluateFold(int direction, int op, const std::vector<double>& list) {
 
         for (size_t i = 1; i < list.size(); ++i) {
             std::cout << "Applying " << opStr << " to result = " << result << " and list[" << i << "] = " << list[i] << std::endl;
-            result = applyOp(opStr, result, list[i]);
+            result = applyOp(opStr, result, list[i]); // left-associative: a - b - c
             std::cout << "New result: " << result << std::endl;
         }
         return result;
-    } else { // RIGHT fold: use recursion to apply operation from the right
+    } else { // RIGHT fold
         std::function<double(size_t)> foldRight;
         foldRight = [&](size_t index) -> double {
             if (index == list.size() - 1) {
@@ -70,13 +71,16 @@ double evaluateFold(int direction, int op, const std::vector<double>& list) {
                 return list[index];
             }
             double rightResult = foldRight(index + 1);
-            std::cout << "Applying " << opStr << " to list[" << index << "] = " << list[index] << " and rightResult = " << rightResult << std::endl;
+            std::cout << "Applying " << opStr << " to list[" << index << "] = " << list[index]
+                      << " and rightResult = " << rightResult << std::endl;
+            // right-associative: a - (b - (c))
             return applyOp(opStr, list[index], rightResult);
         };
 
         return foldRight(0);
     }
 }
+
 
 
 

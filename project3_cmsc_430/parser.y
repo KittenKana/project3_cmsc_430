@@ -279,7 +279,8 @@ direction:
 fold_op:
     Y_OP     { $$ = $1; }
   | SUBOP    { $$ = SUBOP; }
-  ;
+  | ADDOP    { $$ = ADDOP; }
+;
 
 expr_list:
     expression {
