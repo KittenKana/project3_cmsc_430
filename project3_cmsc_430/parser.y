@@ -114,11 +114,10 @@ variable_declaration:
       // Initialize a new vector to store the list values
       vector<Value>* vec = new vector<Value>();
 
+      for (const Value& val : *$7) {
+          vec->push_back(val);  // Push each value from the list into the vector
+      }
 
-        for (const Value& val : *$7) {
-            vec->push_back(val);  // Push each value from the list into the vector
-        }
-      
       // Store the vector in vectorTable using the identifier as the key
       vectorTable[$1] = *vec;
       $$ = 0;  // No return value for variable declaration
@@ -126,10 +125,6 @@ variable_declaration:
   | error SEMICOLON
     { $$ = 0; }
   ;
-
-
-
-
 
 list:
     LPAREN expressions RPAREN { $$ = $2; }
@@ -145,7 +140,6 @@ expressions:
         $$->push_back(Value($1));       // Wrap $1 in a Value and add
     }
   ;
-
 
 body:
     BEGIN_ statements END SEMICOLON
@@ -268,9 +262,6 @@ fold_expr:
     }
   ;
 
-
-
-
 direction:
     LEFT     { $$ = LEFT; }
   | RIGHT    { $$ = RIGHT; }
@@ -295,18 +286,51 @@ expr_list:
 
 
 primary:
-    LPAREN expression RPAREN         { $$ = $2; }
-  | INT_LITERAL                     { $$ = $1; }
-  | REAL_LITERAL                    { $$ = $1; }
-  | CHAR_LITERAL                    { $$ = $1; }
-  | HEX_LITERAL                     { $$ = $1; }
-  | IDENTIFIER LPAREN expression RPAREN { $$ = $3; }
+    LPAREN expression RPAREN             { $$ = $2; }
+  | INT_LITERAL                          { $$ = $1; }
+  | REAL_LITERAL                         { $$ = $1; }
+  | CHAR_LITERAL                         { $$ = $1; }
+  | HEX_LITERAL                          { $$ = $1; }
+  | IDENTIFIER LPAREN expression RPAREN  {
+      std::cerr << "Function calls not implemented.\n";
+      $$ = 0;
+    }
   | IDENTIFIER {
-      string id($1);
-      auto it = symbolTable.find(id);
-      $$ = (it != symbolTable.end() ? it->second : 0.0);
+      std::string id($1);
+      if (symbolTable.find(id) != symbolTable.end()) {
+          $$ = symbolTable[id];
+      } else if (vectorTable.find(id) != vectorTable.end()) {
+          const std::vector<Value>& vec = vectorTable[id];
+          if (vec.empty()) {
+              std::cerr << "Error: Cannot use an empty list as a scalar expression.\n";
+              $$ = 0;
+          } else {
+              $$ = vec[0].realVal;
+          }
+      } else {
+          std::cerr << "Error: Undeclared identifier '" << id << "'.\n";
+          $$ = 0;
+      }
+    }
+  | list {
+      std::vector<Value>* vecPtr = $1;
+      if (vecPtr->empty()) {
+          std::cerr << "Error: Cannot use an empty list literal as a scalar expression.\n";
+          $$ = 0;
+      } else {
+          // Optional: store it as an anonymous variable if needed later
+          static int tempListCounter = 0;
+          std::string tempName = "__temp_list_" + std::to_string(tempListCounter++);
+          vectorTable[tempName] = *vecPtr;
+
+          $$ = (*vecPtr)[0].realVal;
+      }
+      delete vecPtr;
     }
   ;
+
+
+
 
 type:
     INTEGER | REAL | CHARACTER
